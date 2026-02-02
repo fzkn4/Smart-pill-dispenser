@@ -9,9 +9,9 @@
 #define RST_PIN 8
 const int servoPin = 9;
 const int buttonPin = 10;
-const int redLedPin = 1;
-const int yellowLedPin = 2;
-const int greenLedPin = 3;
+const int redLedPin = 2;
+const int yellowLedPin = 3;
+const int greenLedPin = 4;
 const int buzzerPin = 5;
 
 // --- Component Objects ---
