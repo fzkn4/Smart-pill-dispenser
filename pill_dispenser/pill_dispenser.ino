@@ -9,6 +9,10 @@
 #define RST_PIN 8
 const int servoPin = 9;
 const int buttonPin = 10;
+const int redLedPin = 1;
+const int yellowLedPin = 2;
+const int greenLedPin = 3;
+const int buzzerPin = 5;
 
 // --- Component Objects ---
 virtuabotixRTC myClock(CLK_PIN, DAT_PIN, RST_PIN);
@@ -41,6 +45,10 @@ void setup() {
   Serial.println("Pill Dispenser: Starting...");
 
   pinMode(buttonPin, INPUT_PULLUP);
+  pinMode(redLedPin, OUTPUT);
+  pinMode(yellowLedPin, OUTPUT);
+  pinMode(greenLedPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
 
   // myClock.setDS1302Time(0, 0, 12, 1, 1, 2024); // S, M, H, DoW, DoM, M, Y
 
@@ -93,6 +101,33 @@ void drawClock() {
   drawMessage(timeStr, dateStr);
 }
 
+// --- Sound Helper ---
+void playSound(int type) {
+  // Type 1: Dispensing (Attention)
+  if (type == 1) {
+    for (int i = 0; i < 3; i++) {
+      tone(buzzerPin, 1000); // 1kHz
+      delay(200);
+      noTone(buzzerPin);
+      delay(100);
+    }
+  }
+  // Type 2: Taken (Success - Ascending)
+  else if (type == 2) {
+    tone(buzzerPin, 1000); delay(150);
+    tone(buzzerPin, 1500); delay(150);
+    tone(buzzerPin, 2000); delay(300);
+    noTone(buzzerPin);
+  }
+  // Type 3: Not Taken (Failure - Descending)
+  else if (type == 3) {
+    tone(buzzerPin, 500); delay(200);
+    tone(buzzerPin, 400); delay(200);
+    tone(buzzerPin, 300); delay(400);
+    noTone(buzzerPin);
+  }
+}
+
 // --- Main State Machine and Loop ---
 void loop() {
   myClock.updateTime();
@@ -110,6 +145,7 @@ void loop() {
         lastMinuteDispensed = myClock.minutes;
         currentState = DISPENSING;
         stateChangeTime = millis();
+        playSound(1); // Alert User
       }
       break;
 
@@ -125,14 +161,18 @@ void loop() {
       // Check if button was pressed
       if (digitalRead(buttonPin) == LOW) {
         Serial.println("--- Meds Taken ---");
+        myservo.write(naturalPosition); // Ensure safe position
         currentState = ACKNOWLEDGED;
         stateChangeTime = millis();
+        playSound(2); // Success Sound
       }
       // Check if 3-minute window has passed
       else if (millis() - stateChangeTime >= ackWindowDuration) {
         Serial.println("--- Meds Not Taken (Timeout) ---");
+        Serial.println("--- Meds Not Taken (Timeout) ---");
         currentState = TIMED_OUT;
         stateChangeTime = millis();
+        playSound(3); // Failure Sound
       }
       break;
 
@@ -165,6 +205,34 @@ void loop() {
       break;
     case TIMED_OUT:
       drawMessage("Meds Not Taken", "!");
+      break;
+  }
+
+  // --- LED Logic ---
+  // Yellow: Pending (Dispensing or Waiting)
+  // Green: Taken (Acknowledged)
+  // Red: Not Taken (Timed Out)
+  switch (currentState) {
+    case IDLE:
+      digitalWrite(redLedPin, LOW);
+      digitalWrite(yellowLedPin, LOW);
+      digitalWrite(greenLedPin, LOW);
+      break;
+    case DISPENSING:
+    case WAITING_FOR_ACK:
+      digitalWrite(redLedPin, LOW);
+      digitalWrite(yellowLedPin, HIGH);
+      digitalWrite(greenLedPin, LOW);
+      break;
+    case ACKNOWLEDGED:
+      digitalWrite(redLedPin, LOW);
+      digitalWrite(yellowLedPin, LOW);
+      digitalWrite(greenLedPin, HIGH);
+      break;
+    case TIMED_OUT:
+      digitalWrite(redLedPin, HIGH);
+      digitalWrite(yellowLedPin, LOW);
+      digitalWrite(greenLedPin, LOW);
       break;
   }
 
