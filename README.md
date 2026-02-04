@@ -72,13 +72,38 @@ Connect the components to the Arduino Uno as follows:
     - Near the top of the sketch, you can change the `dispenseInterval` variable from `5` to any other number to change the minutes between dispenses.
 7.  **Upload Final Code:** Upload the final version of the sketch (with the time-setting line commented out).
 
-## How It Works
+## How It Works (System Flow)
 
-The dispenser operates on a simple state machine controlled by `millis()` timers to avoid blocking the main loop.
+The dispenser operates on a non-blocking state machine loop (`loop()`) that consistently checks the time and the current state of the device. Here is the step-by-step flow:
 
-1.  **IDLE:** The device displays the clock. LEDs are OFF.
-2.  **DISPENSING:** The servo activates, Yellow LED turns ON, and the Buzzer beeps 3 times. OLED shows "MEDICINE DISPENSED".
-3.  **WAITING FOR ACKNOWLEDGEMENT:** The system enters a 3-minute window. Yellow LED remains ON.
-4.  **FEEDBACK:**
-    - **Success:** If the button is pressed, Green LED turns ON, Buzzer plays a happy melody, and OLED shows "Meds Taken".
-    - **Timeout:** If time runs out, Red LED turns ON, Buzzer plays a sad melody, and OLED shows "Meds Not Taken".
+### 1. Idle State (System Monitoring)
+- **Action:** The system continuously reads the time from the DS1302 RTC.
+- **Display:** The OLED screen shows the current Date and Time.
+- **Condition:** It checks if the current minute matches the configured `dispenseInterval`.
+    - *Example:* If set to 1 minute, it tries to dispense every time the minute changes.
+
+### 2. Dispensing State (Action)
+- **Trigger:** When the dispense time is reached (and it hasn't already dispensed for this specific minute).
+- **Sequence:**
+    1.  **Alert:** The Buzzer beeps 3 times (1kHz) to notify the user.
+    2.  **Display:** Screen updates to show "MEDICINE DISPENSED".
+    3.  **LED:** Yellow LED turns ON (indicating pending action).
+    4.  **Movement:** The Servo motor moves from 0° (Natural) to 180° (Dispense) smoothly.
+    5.  **Wait:** Pauses for 1 second to allow pills to slide out.
+    6.  **Return:** The Servo moves back to 0° (Natural) smoothly.
+- **Transition:** Automatically moves to the **Waiting for Acknowledgement** state.
+
+### 3. Waiting for Acknowledgement State (User Response)
+- **Duration:** The system waits for up to **30 seconds** (configurable via `ackWindowDuration`) for the user to take the meds.
+- **Display:** Screen shows the current time, but the Yellow LED remains ON.
+- **User Action:** The user must press the **Push Button** to confirm they have taken the medication.
+- **Outcomes:**
+    - **If Button Pressed:** The system records the success and moves to the **Acknowledged** state.
+    - **If Time Runs Out:** The system records a failure (timeout) and moves to the **Timed Out** state.
+
+### 4. Feedback State (Result)
+- **Acknowledged (Success):**
+    - **Feedback:** Green LED turns ON, Buzzer plays a "Success" melody (ascending tones), and Screen says "Meds Taken".
+- **Timed Out (Failure):**
+    - **Feedback:** Red LED turns ON, Buzzer plays a "Failure" melody (descending tones), and Screen says "Meds Not Taken".
+- **Completion:** After showing the feedback message for 5 seconds, the system returns to the **Idle State** to wait for the next cycle.
